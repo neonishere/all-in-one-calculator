@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:math_expressions/math_expressions.dart';
@@ -9,6 +11,7 @@ import '../../shared/widgets/calc_key_button.dart';
 import '../../shared/widgets/coming_soon_screen.dart';
 import '../tool_menu/tool_menu_screen.dart';
 import 'history_panel.dart';
+import 'memory_panel.dart';
 
 const _calculatorModes = ['Standard', 'Scientific', 'Graphing', 'Programmer'];
 
@@ -23,6 +26,8 @@ class _BasicCalculatorScreenState extends State<BasicCalculatorScreen>
     with SingleTickerProviderStateMixin {
   String _expression = '';
   String _preview = '';
+  double _memory = 0;
+  int _nthRootN = 2;
 
   late final AnimationController _reveal = AnimationController(
     vsync: this,
@@ -69,15 +74,21 @@ class _BasicCalculatorScreenState extends State<BasicCalculatorScreen>
     '(': '(',
     ')': ')',
     '%': '%',
+    '^': '^',
   };
 
   static const _keys = [
-    'C', '(', ')', '⌫',
-    '7', '8', '9', '÷',
-    '4', '5', '6', '×',
-    '1', '2', '3', '−',
-    '%', '0', '.', '+',
+    'MC', 'MR', 'M+', 'M−',
+    '^', 'nthroot', 'C', '⌫',
+    '(', ')', '%', '÷',
+    '7', '8', '9', '×',
+    '4', '5', '6', '−',
+    '1', '2', '3', '+',
+    '+/−', '0', '.', '=',
   ];
+
+  static const _memoryKeys = {'MC', 'MR', 'M+', 'M−'};
+  static const _plainKeys = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '+/−'};
 
   @override
   void initState() {
@@ -131,24 +142,103 @@ class _BasicCalculatorScreenState extends State<BasicCalculatorScreen>
   }
 
   void _onKey(String key) {
+    switch (key) {
+      case 'C':
+        _setExpression('');
+        return;
+      case '⌫':
+        _setExpression(_expression.isEmpty ? '' : _expression.substring(0, _expression.length - 1));
+        return;
+      case '=':
+        _evaluate();
+        return;
+      case 'nthroot':
+        _applyUnary((v) => v < 0 ? double.nan : math.pow(v, 1 / _nthRootN).toDouble());
+        return;
+      case '+/−':
+        _applyUnary((v) => -v);
+        return;
+      case 'MC':
+        setState(() => _memory = 0);
+        return;
+      case 'MR':
+        _setExpression(_formatNumber(_memory));
+        return;
+      case 'M+':
+        final v = _currentValue();
+        if (v != null) setState(() => _memory += v);
+        return;
+      case 'M−':
+        final v = _currentValue();
+        if (v != null) setState(() => _memory -= v);
+        return;
+      default:
+        _setExpression(_expression + key);
+    }
+  }
+
+  void _setExpression(String value) {
     setState(() {
-      switch (key) {
-        case 'C':
-          _expression = '';
-          break;
-        case '⌫':
-          if (_expression.isNotEmpty) {
-            _expression = _expression.substring(0, _expression.length - 1);
-          }
-          break;
-        case '=':
-          _evaluate();
-          return;
-        default:
-          _expression += key;
-      }
+      _expression = value;
       _preview = _tryEvaluate(_expression) ?? '';
     });
+  }
+
+  double? _currentValue() => double.tryParse(_tryEvaluate(_expression) ?? '');
+
+  void _applyUnary(double Function(double) fn) {
+    final current = _currentValue();
+    if (current == null) return;
+    final result = fn(current);
+    if (result.isNaN || result.isInfinite) return;
+    _setExpression(_formatNumber(result));
+  }
+
+  Future<void> _askNthRoot() async {
+    final controller = TextEditingController(text: _nthRootN.toString());
+    final n = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Root degree'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'e.g. 3 for cube root'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(int.tryParse(controller.text)),
+            child: const Text('Apply'),
+          ),
+        ],
+      ),
+    );
+    if (n == null || n < 2 || n > 20) return;
+    setState(() => _nthRootN = n);
+    _applyUnary((v) => v < 0 ? double.nan : math.pow(v, 1 / n).toDouble());
+  }
+
+  void _openMemorySheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetContext) => MemoryPanel(
+        value: _memory,
+        formattedValue: _formatNumber(_memory),
+        onRecall: () {
+          Navigator.of(sheetContext).pop();
+          _setExpression(_formatNumber(_memory));
+        },
+        onClear: () {
+          Navigator.of(sheetContext).pop();
+          setState(() => _memory = 0);
+        },
+      ),
+    );
   }
 
   void _evaluate() {
@@ -176,16 +266,14 @@ class _BasicCalculatorScreenState extends State<BasicCalculatorScreen>
       final exp = parser.parse(sanitized);
       final value = exp.evaluate(EvaluationType.REAL, ContextModel());
       if (value.isNaN || value.isInfinite) return null;
-      final asString = value == value.roundToDouble()
-          ? value.toInt().toString()
-          : _trimTrailingZeros(value);
-      return asString;
+      return _formatNumber(value);
     } catch (_) {
       return null;
     }
   }
 
-  String _trimTrailingZeros(double value) {
+  String _formatNumber(double value) {
+    if (value == value.roundToDouble() && value.abs() < 1e15) return value.toInt().toString();
     var text = value.toStringAsFixed(8);
     text = text.replaceFirst(RegExp(r'0+$'), '');
     text = text.replaceFirst(RegExp(r'\.$'), '');
@@ -196,9 +284,7 @@ class _BasicCalculatorScreenState extends State<BasicCalculatorScreen>
   void _closeHistory() => _reveal.animateTo(0, curve: Curves.easeOutCubic);
 
   void _openToolMenu() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ToolMenuScreen()),
-    );
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ToolMenuScreen()));
   }
 
   void _onPanStart(DragStartDetails details) {
@@ -240,6 +326,11 @@ class _BasicCalculatorScreenState extends State<BasicCalculatorScreen>
         ),
         title: const Text('Calculator'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.savings_outlined),
+            tooltip: 'Memory',
+            onPressed: _openMemorySheet,
+          ),
           IconButton(
             icon: const Icon(Icons.history),
             tooltip: 'History',
@@ -293,7 +384,10 @@ class _BasicCalculatorScreenState extends State<BasicCalculatorScreen>
                               width: double.infinity,
                               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                               alignment: Alignment.bottomRight,
-                              child: Column(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.bottomRight,
+                                child: Column(
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
@@ -310,11 +404,12 @@ class _BasicCalculatorScreenState extends State<BasicCalculatorScreen>
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ],
+                                ),
                               ),
                             ),
                           ),
                         ),
-                        Expanded(flex: 5, child: _buildKeypad()),
+                        Expanded(flex: 8, child: _buildKeypad()),
                       ],
                     ),
                   ),
@@ -329,53 +424,50 @@ class _BasicCalculatorScreenState extends State<BasicCalculatorScreen>
 
   Widget _buildKeypad() {
     final rows = [for (var i = 0; i < _keys.length; i += 4) _keys.skip(i).take(4).toList()];
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420, maxHeight: 560),
-        child: AspectRatio(
-          aspectRatio: 4 / 5,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              children: [
-                for (final row in rows)
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Row(
-                        children: [
-                          for (final key in row)
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.only(right: 10),
-                                child: _buildKey(key),
-                              ),
-                            ),
-                        ],
+    return Padding(
+      padding: const EdgeInsets.all(10),
+      child: Column(
+        children: [
+          for (final row in rows)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    for (final key in row)
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: _buildKey(key),
+                        ),
                       ),
-                    ),
-                  ),
-                Expanded(
-                  child: CalcKeyButton(
-                    label: '=',
-                    filled: true,
-                    fontSize: 24,
-                    onTap: () => _onKey('='),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
+        ],
       ),
     );
   }
 
   Widget _buildKey(String key) {
-    final isOperator = ['÷', '×', '−', '+', '%'].contains(key);
+    if (key == '=') {
+      return CalcKeyButton(label: '=', filled: true, fontSize: 22, onTap: () => _onKey('='));
+    }
+    final isMemory = _memoryKeys.contains(key);
+    if (key == 'nthroot') {
+      return CalcKeyButton(
+        label: 'ˣ√',
+        accented: true,
+        onTap: () => _onKey('nthroot'),
+        onLongPress: _askNthRoot,
+      );
+    }
     return CalcKeyButton(
       label: key,
-      accented: isOperator,
+      accented: !isMemory && !_plainKeys.contains(key),
+      dimmed: isMemory,
+      themed: isMemory,
       onTap: () => _onKey(key),
     );
   }
