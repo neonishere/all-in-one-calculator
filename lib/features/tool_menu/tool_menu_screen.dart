@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/catalog/tool_catalog.dart';
 import '../../core/catalog/tool_category.dart';
 import '../../core/catalog/tool_entry.dart';
+import '../../core/routing/fade_pop_route.dart';
 import '../../core/settings/favorites_store.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/coming_soon_screen.dart';
@@ -40,7 +41,7 @@ class _ToolMenuScreenState extends State<ToolMenuScreen> {
           icon: const Icon(Icons.settings_outlined),
           tooltip: 'Settings',
           onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            fadePopRoute(const SettingsScreen()),
           ),
         ),
         title: const Text('All tools'),
@@ -114,9 +115,7 @@ class _ToolMenuScreenState extends State<ToolMenuScreen> {
         onPressed: () => favorites.toggle(tool.id),
       ),
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: tool.builder ?? (_) => ComingSoonScreen(title: tool.title),
-        ),
+        fadePopRoute(tool.builder?.call(context) ?? ComingSoonScreen(title: tool.title)),
       ),
     );
   }
