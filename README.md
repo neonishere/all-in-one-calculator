@@ -1,5 +1,6 @@
 # All-in-One Calculator
 
+Small personal project
 
 ## License
 
