@@ -128,7 +128,8 @@ class _BlockUnitConverterScreenState extends State<BlockUnitConverterScreen> {
   }
 
   Future<void> _addBlock() async {
-    final unit = await _pickUnit();
+    final usedIds = _blocks.map((b) => b.unit.id).toSet();
+    final unit = await _pickUnit(excludeIds: usedIds);
     if (unit == null) return;
     final baseValue = _currentBaseValue();
     final settings = context.read<NumberFormatSettings>();
@@ -143,7 +144,8 @@ class _BlockUnitConverterScreenState extends State<BlockUnitConverterScreen> {
     final settings = context.read<NumberFormatSettings>();
     final currentValue = settings.parse(block.controller.text) ?? double.tryParse(block.controller.text);
     final baseValue = currentValue != null ? block.unit.toBase(currentValue) : null;
-    final newUnit = await _pickUnit();
+    final usedIds = _blocks.where((b) => b != block).map((b) => b.unit.id).toSet();
+    final newUnit = await _pickUnit(excludeIds: usedIds);
     if (newUnit == null) return;
     setState(() {
       block.unit = newUnit;
@@ -158,7 +160,7 @@ class _BlockUnitConverterScreenState extends State<BlockUnitConverterScreen> {
     block.dispose();
   }
 
-  Future<ConverterUnit?> _pickUnit() async {
+  Future<ConverterUnit?> _pickUnit({Set<String> excludeIds = const {}}) async {
     var query = '';
     return showModalBottomSheet<ConverterUnit>(
       context: context,
@@ -168,7 +170,8 @@ class _BlockUnitConverterScreenState extends State<BlockUnitConverterScreen> {
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (sheetContext, setSheetState) {
-            final filtered = widget.units.where((u) => u.label.toLowerCase().contains(query.toLowerCase())).toList();
+            final available = widget.units.where((u) => !excludeIds.contains(u.id));
+            final filtered = available.where((u) => u.label.toLowerCase().contains(query.toLowerCase())).toList();
             return SizedBox(
               height: MediaQuery.of(sheetContext).size.height * 0.7,
               child: Column(
@@ -187,16 +190,23 @@ class _BlockUnitConverterScreenState extends State<BlockUnitConverterScreen> {
                     ),
                   ),
                   Expanded(
-                    child: ListView(
-                      children: [
-                        for (final unit in filtered)
-                          ListTile(
-                            title: Text(unit.label),
-                            trailing: Text(unit.shortLabel, style: const TextStyle(color: AppColors.textSecondary)),
-                            onTap: () => Navigator.of(sheetContext).pop(unit),
+                    child: filtered.isEmpty
+                        ? Center(
+                            child: Text(
+                              'All units already added',
+                              style: TextStyle(color: AppColors.textSecondary),
+                            ),
+                          )
+                        : ListView(
+                            children: [
+                              for (final unit in filtered)
+                                ListTile(
+                                  title: Text(unit.label),
+                                  trailing: Text(unit.shortLabel, style: TextStyle(color: AppColors.textSecondary)),
+                                  onTap: () => Navigator.of(sheetContext).pop(unit),
+                                ),
+                            ],
                           ),
-                      ],
-                    ),
                   ),
                 ],
               ),
@@ -235,6 +245,7 @@ class _BlockUnitConverterScreenState extends State<BlockUnitConverterScreen> {
                 ),
               )
             : ReorderableListView(
+                buildDefaultDragHandles: false,
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
                 onReorder: (oldIndex, newIndex) {
                   setState(() {
@@ -260,38 +271,37 @@ class _BlockUnitConverterScreenState extends State<BlockUnitConverterScreen> {
     return Container(
       key: ValueKey(block),
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.fromLTRB(4, 10, 8, 10),
       decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(14)),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           ReorderableDragStartListener(
             index: _blocks.indexOf(block),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Icon(Icons.drag_handle, color: AppColors.textSecondary),
             ),
           ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 InkWell(
                   onTap: () => _changeUnit(block),
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            block.unit.label,
-                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          block.unit.label,
+                          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        const Icon(Icons.arrow_drop_down, color: AppColors.textSecondary, size: 18),
-                      ],
-                    ),
+                      ),
+                      Icon(Icons.arrow_drop_down, color: AppColors.textSecondary, size: 18),
+                    ],
                   ),
                 ),
                 TextField(
@@ -300,22 +310,36 @@ class _BlockUnitConverterScreenState extends State<BlockUnitConverterScreen> {
                   keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
                   inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-]'))],
                   style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     isDense: true,
+                    isCollapsed: true,
                     border: InputBorder.none,
-                    contentPadding: const EdgeInsets.only(bottom: 10),
-                    suffixText: block.unit.shortLabel,
                   ),
                   onChanged: (_) => _recalculateFrom(block),
                 ),
               ],
             ),
           ),
-          if (_blocks.length > 1)
-            IconButton(
-              icon: const Icon(Icons.close, size: 18, color: AppColors.textSecondary),
-              onPressed: () => _removeBlock(block),
+          const SizedBox(width: 6),
+          SizedBox(
+            width: 44,
+            child: Text(
+              block.unit.shortLabel,
+              textAlign: TextAlign.right,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 15),
             ),
+          ),
+          SizedBox(
+            width: 40,
+            child: _blocks.length > 1
+                ? IconButton(
+                    padding: EdgeInsets.zero,
+                    icon: Icon(Icons.close, size: 18, color: AppColors.textSecondary),
+                    onPressed: () => _removeBlock(block),
+                  )
+                : null,
+          ),
         ],
       ),
     );
