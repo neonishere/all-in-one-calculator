@@ -54,7 +54,7 @@ class _CurrencyConverterScreenState extends State<CurrencyConverterScreen> {
           Row(
             children: [
               Expanded(child: _codeDropdown(codes, _from, (v) => setState(() => _from = v))),
-              const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Icon(Icons.arrow_forward, color: AppColors.textSecondary)),
+              Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Icon(Icons.arrow_forward, color: AppColors.textSecondary)),
               Expanded(child: _codeDropdown(codes, _to, (v) => setState(() => _to = v))),
             ],
           ),
@@ -74,7 +74,7 @@ class _CurrencyConverterScreenState extends State<CurrencyConverterScreen> {
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(color: AppColors.surfaceAlt, borderRadius: BorderRadius.circular(12)),
-      child: Text(text, style: const TextStyle(color: AppColors.textSecondary)),
+      child: Text(text, style: TextStyle(color: AppColors.textSecondary)),
     );
   }
 

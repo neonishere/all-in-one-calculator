@@ -52,7 +52,7 @@ class NumberFormatSettingsSheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            const Text('Thousands & decimal separator', style: TextStyle(color: AppColors.textSecondary)),
+            Text('Thousands & decimal separator', style: TextStyle(color: AppColors.textSecondary)),
             for (final style in NumberFormatStyle.values)
               RadioListTile<NumberFormatStyle>(
                 value: style,

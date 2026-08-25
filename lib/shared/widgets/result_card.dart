@@ -24,7 +24,7 @@ class ResultCard extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 15)),
+                  Text(label, style: TextStyle(color: AppColors.textSecondary, fontSize: 15)),
                   Text(
                     value,
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),

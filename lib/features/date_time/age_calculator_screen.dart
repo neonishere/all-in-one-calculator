@@ -53,7 +53,7 @@ class _AgeCalculatorScreenState extends State<AgeCalculatorScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Birth date: ${_birthDate.toLocal().toString().substring(0, 10)}'),
-                const Icon(Icons.calendar_today, color: AppColors.accent, size: 20),
+                Icon(Icons.calendar_today, color: AppColors.accent, size: 20),
               ],
             ),
           ),
