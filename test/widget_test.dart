@@ -4,11 +4,15 @@ import 'package:provider/provider.dart';
 
 import 'package:allinone_calculator/app.dart';
 import 'package:allinone_calculator/core/currency/currency_repository.dart';
+import 'package:allinone_calculator/core/settings/number_format_settings.dart';
 
 void main() {
   Widget buildApp() {
-    return ChangeNotifierProvider(
-      create: (_) => CurrencyRepository(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => CurrencyRepository()),
+        ChangeNotifierProvider(create: (_) => NumberFormatSettings()),
+      ],
       child: const CalcApp(),
     );
   }
