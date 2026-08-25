@@ -187,6 +187,16 @@ Win32Window::MessageHandler(HWND hwnd,
       }
       return 0;
 
+    case WM_GETMINMAXINFO: {
+      auto info = reinterpret_cast<MINMAXINFO*>(lparam);
+      // Roughly 380x520 logical pixels, scaled for the window's current DPI.
+      UINT dpi = GetDpiForWindow(hwnd);
+      double scale = static_cast<double>(dpi) / 96.0;
+      info->ptMinTrackSize.x = static_cast<LONG>(380 * scale);
+      info->ptMinTrackSize.y = static_cast<LONG>(520 * scale);
+      return 0;
+    }
+
     case WM_DPICHANGED: {
       auto newRectSize = reinterpret_cast<RECT*>(lparam);
       LONG newWidth = newRectSize->right - newRectSize->left;
