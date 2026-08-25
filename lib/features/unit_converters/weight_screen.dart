@@ -1,23 +1,28 @@
 import 'package:flutter/material.dart';
 
-import '../../shared/widgets/linear_unit_converter_screen.dart';
+import '../../shared/converters/converter_unit.dart';
+import '../../shared/widgets/block_unit_converter_screen.dart';
 
 /// Base unit: kilogram.
 class WeightScreen extends StatelessWidget {
   const WeightScreen({super.key});
 
-  static const units = [
-    LinearUnit('Milligrams (mg)', 0.000001),
-    LinearUnit('Grams (g)', 0.001),
-    LinearUnit('Kilograms (kg)', 1),
-    LinearUnit('Metric tons (t)', 1000),
-    LinearUnit('Ounces (oz)', 0.0283495),
-    LinearUnit('Pounds (lb)', 0.453592),
-    LinearUnit('Stone (st)', 6.35029),
+  static final units = [
+    ConverterUnit.linear(id: 'mg', label: 'Milligrams', shortLabel: 'mg', factor: 0.000001),
+    ConverterUnit.linear(id: 'g', label: 'Grams', shortLabel: 'g', factor: 0.001),
+    ConverterUnit.linear(id: 'kg', label: 'Kilograms', shortLabel: 'kg', factor: 1),
+    ConverterUnit.linear(id: 't', label: 'Metric tons', shortLabel: 't', factor: 1000),
+    ConverterUnit.linear(id: 'oz', label: 'Ounces', shortLabel: 'oz', factor: 0.0283495),
+    ConverterUnit.linear(id: 'lb', label: 'Pounds', shortLabel: 'lb', factor: 0.453592),
+    ConverterUnit.linear(id: 'st', label: 'Stone', shortLabel: 'st', factor: 6.35029),
   ];
 
   @override
   Widget build(BuildContext context) {
-    return const LinearUnitConverterScreen(title: 'Weight', units: units);
+    return BlockUnitConverterScreen(
+      title: 'Weight',
+      units: units,
+      defaultUnitIds: const ['kg', 'g', 'lb'],
+    );
   }
 }

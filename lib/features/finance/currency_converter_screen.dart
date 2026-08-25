@@ -3,8 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../../core/currency/currency_repository.dart';
 import '../../core/theme/app_theme.dart';
-import '../../shared/widgets/linear_unit_converter_screen.dart';
 import '../../shared/widgets/number_field.dart';
+import '../../shared/widgets/result_value_card.dart';
 import '../../shared/widgets/tool_scaffold.dart';
 
 class CurrencyConverterScreen extends StatefulWidget {
@@ -58,7 +58,7 @@ class _CurrencyConverterScreenState extends State<CurrencyConverterScreen> {
               Expanded(child: _codeDropdown(codes, _to, (v) => setState(() => _to = v))),
             ],
           ),
-        ResultCardValue(value: result),
+        ResultValueCard(value: result),
         const SizedBox(height: 12),
         TextButton.icon(
           onPressed: repo.status == CurrencyFetchStatus.loading ? null : () => repo.refresh(),
