@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/catalog/tool_catalog.dart';
 import '../../core/catalog/tool_category.dart';
 import '../../core/catalog/tool_entry.dart';
+import '../../core/settings/favorites_store.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/coming_soon_screen.dart';
 import '../settings/settings_screen.dart';
@@ -19,6 +21,7 @@ class _ToolMenuScreenState extends State<ToolMenuScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final favorites = context.watch<FavoritesStore>();
     final query = _query.trim().toLowerCase();
     final filtered = query.isEmpty
         ? toolCatalog
@@ -29,16 +32,23 @@ class _ToolMenuScreenState extends State<ToolMenuScreen> {
       grouped.putIfAbsent(tool.category, () => []).add(tool);
     }
 
+    final favoriteTools = filtered.where((t) => favorites.isFavorite(t.id)).toList();
+
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.settings_outlined),
+          tooltip: 'Settings',
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const SettingsScreen()),
+          ),
+        ),
         title: const Text('All tools'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: 'Settings',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const SettingsScreen()),
-            ),
+            icon: const Icon(Icons.arrow_forward),
+            tooltip: 'Back to calculator',
+            onPressed: () => Navigator.of(context).pop(),
           ),
         ],
       ),
@@ -61,16 +71,14 @@ class _ToolMenuScreenState extends State<ToolMenuScreen> {
             Expanded(
               child: ListView(
                 children: [
+                  if (favoriteTools.isNotEmpty) ...[
+                    _sectionHeader('Favorites'),
+                    for (final tool in favoriteTools) _toolTile(tool, favorites),
+                  ],
                   for (final category in ToolCategory.values)
                     if (grouped[category]?.isNotEmpty ?? false) ...[
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-                        child: Text(
-                          category.label,
-                          style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      for (final tool in grouped[category]!) _toolTile(tool),
+                      _sectionHeader(category.label),
+                      for (final tool in grouped[category]!) _toolTile(tool, favorites),
                     ],
                 ],
               ),
@@ -81,11 +89,30 @@ class _ToolMenuScreenState extends State<ToolMenuScreen> {
     );
   }
 
-  Widget _toolTile(ToolEntry tool) {
+  Widget _sectionHeader(String label) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+      child: Text(
+        label,
+        style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+
+  Widget _toolTile(ToolEntry tool, FavoritesStore favorites) {
+    final isFavorite = favorites.isFavorite(tool.id);
     return ListTile(
       leading: Icon(tool.icon),
       title: Text(tool.title),
-      subtitle: tool.isImplemented ? null : const Text('Coming soon', style: TextStyle(color: AppColors.textSecondary)),
+      subtitle: tool.isImplemented ? null : Text('Coming soon', style: TextStyle(color: AppColors.textSecondary)),
+      trailing: IconButton(
+        icon: Icon(
+          isFavorite ? Icons.star : Icons.star_border,
+          color: isFavorite ? AppColors.accent : AppColors.textSecondary,
+        ),
+        tooltip: isFavorite ? 'Remove from favorites' : 'Add to favorites',
+        onPressed: () => favorites.toggle(tool.id),
+      ),
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(
           builder: tool.builder ?? (_) => ComingSoonScreen(title: tool.title),
