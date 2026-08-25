@@ -5,6 +5,7 @@ import '../../core/catalog/tool_category.dart';
 import '../../core/catalog/tool_entry.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/coming_soon_screen.dart';
+import '../settings/settings_screen.dart';
 
 class ToolMenuScreen extends StatefulWidget {
   const ToolMenuScreen({super.key});
@@ -29,7 +30,18 @@ class _ToolMenuScreenState extends State<ToolMenuScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('All tools')),
+      appBar: AppBar(
+        title: const Text('All tools'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Settings',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            ),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Column(
           children: [
