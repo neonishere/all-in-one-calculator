@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:math_expressions/math_expressions.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/calc_key_button.dart';
+import '../../shared/widgets/coming_soon_screen.dart';
 import '../tool_menu/tool_menu_screen.dart';
+
+const _calculatorModes = ['Standard', 'Scientific', 'Graphing', 'Programmer'];
 
 class BasicCalculatorScreen extends StatefulWidget {
   const BasicCalculatorScreen({super.key});
@@ -94,6 +98,23 @@ class _BasicCalculatorScreenState extends State<BasicCalculatorScreen> {
           ),
         ),
         title: const Text('Calculator'),
+        actions: [
+          PopupMenuButton<String>(
+            tooltip: 'Calculator mode',
+            icon: const Icon(Icons.calculate_outlined),
+            onSelected: (mode) {
+              if (mode != 'Standard') {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => ComingSoonScreen(title: mode)),
+                );
+              }
+            },
+            itemBuilder: (context) => [
+              for (final mode in _calculatorModes)
+                PopupMenuItem(value: mode, child: Text(mode)),
+            ],
+          ),
+        ],
       ),
       body: SafeArea(
         child: Column(
@@ -158,17 +179,11 @@ class _BasicCalculatorScreenState extends State<BasicCalculatorScreen> {
                   ),
                 ),
               Expanded(
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accent,
-                      foregroundColor: Colors.black,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    ),
-                    onPressed: () => _onKey('='),
-                    child: const Text('=', style: TextStyle(fontSize: 24)),
-                  ),
+                child: CalcKeyButton(
+                  label: '=',
+                  filled: true,
+                  fontSize: 24,
+                  onTap: () => _onKey('='),
                 ),
               ),
             ],
@@ -180,16 +195,10 @@ class _BasicCalculatorScreenState extends State<BasicCalculatorScreen> {
 
   Widget _buildKey(String key) {
     final isOperator = ['÷', '×', '−', '+', '%'].contains(key);
-    final isAction = key == 'C' || key == '⌫';
-    return ElevatedButton(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: isOperator || isAction ? AppColors.surfaceAlt : AppColors.surface,
-        foregroundColor: isOperator ? AppColors.accent : AppColors.textPrimary,
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      ),
-      onPressed: () => _onKey(key),
-      child: Text(key, style: const TextStyle(fontSize: 20)),
+    return CalcKeyButton(
+      label: key,
+      accented: isOperator,
+      onTap: () => _onKey(key),
     );
   }
 }
