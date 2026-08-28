@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../features/algebra/average_screen.dart';
+import '../../features/algebra/combinations_screen.dart';
+import '../../features/algebra/equations_screen.dart';
 import '../../features/algebra/gcf_lcm_screen.dart';
+import '../../features/algebra/number_generator_screen.dart';
 import '../../features/algebra/percentage_screen.dart';
 import '../../features/algebra/prime_checker_screen.dart';
+import '../../features/algebra/proportion_screen.dart';
+import '../../features/algebra/ratio_screen.dart';
 import '../../features/date_time/age_calculator_screen.dart';
 import '../../features/finance/currency_converter_screen.dart';
 import '../../features/finance/sales_tax_screen.dart';
@@ -23,13 +28,13 @@ final List<ToolEntry> toolCatalog = [
   // Algebra
   ToolEntry(id: 'percentage', title: 'Percentage', category: ToolCategory.algebra, icon: Icons.percent, builder: (_) => const PercentageScreen()),
   ToolEntry(id: 'average', title: 'Average', category: ToolCategory.algebra, icon: Icons.show_chart, builder: (_) => const AverageScreen()),
-  const ToolEntry(id: 'proportion', title: 'Proportion', category: ToolCategory.algebra, icon: Icons.balance),
-  const ToolEntry(id: 'ratio', title: 'Ratio', category: ToolCategory.algebra, icon: Icons.compare_arrows),
-  const ToolEntry(id: 'equations', title: 'Equations', category: ToolCategory.algebra, icon: Icons.functions),
+  ToolEntry(id: 'proportion', title: 'Proportion', category: ToolCategory.algebra, icon: Icons.balance, builder: (_) => const ProportionScreen()),
+  ToolEntry(id: 'ratio', title: 'Ratio', category: ToolCategory.algebra, icon: Icons.compare_arrows, builder: (_) => const RatioScreen()),
+  ToolEntry(id: 'equations', title: 'Equations', category: ToolCategory.algebra, icon: Icons.functions, builder: (_) => const EquationsScreen()),
   ToolEntry(id: 'gcf_lcm', title: 'GCF & LCM', category: ToolCategory.algebra, icon: Icons.grid_3x3, builder: (_) => const GcfLcmScreen()),
-  const ToolEntry(id: 'combinations', title: 'Combinations', category: ToolCategory.algebra, icon: Icons.shuffle),
+  ToolEntry(id: 'combinations', title: 'Combinations', category: ToolCategory.algebra, icon: Icons.shuffle, builder: (_) => const CombinationsScreen()),
   ToolEntry(id: 'prime_checker', title: 'Prime checker', category: ToolCategory.algebra, icon: Icons.tag, builder: (_) => const PrimeCheckerScreen()),
-  const ToolEntry(id: 'number_generator', title: 'Number generator', category: ToolCategory.algebra, icon: Icons.casino),
+  ToolEntry(id: 'number_generator', title: 'Number generator', category: ToolCategory.algebra, icon: Icons.casino, builder: (_) => const NumberGeneratorScreen()),
 
   // Geometry
   ToolEntry(id: 'shapes', title: 'Shapes', category: ToolCategory.geometry, icon: Icons.category, builder: (_) => const ShapesScreen()),
