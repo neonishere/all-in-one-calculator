@@ -1,8 +1,11 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/result_card.dart';
+import '../../shared/widgets/solution_button.dart';
 import '../../shared/widgets/tool_scaffold.dart';
+import '../../shared/widgets/value_list_editor.dart';
 
 class AverageScreen extends StatefulWidget {
   const AverageScreen({super.key});
@@ -12,47 +15,63 @@ class AverageScreen extends StatefulWidget {
 }
 
 class _AverageScreenState extends State<AverageScreen> {
-  final _controller = TextEditingController();
-
-  List<double> get _numbers => _controller.text
-      .split(RegExp(r'[,\s]+'))
-      .map((s) => double.tryParse(s))
-      .whereType<double>()
-      .toList();
+  List<double> _values = [];
 
   @override
   Widget build(BuildContext context) {
-    final numbers = _numbers;
-    final mean = numbers.isEmpty ? null : numbers.reduce((a, b) => a + b) / numbers.length;
-    final sorted = [...numbers]..sort();
-    final median = sorted.isEmpty
-        ? null
-        : sorted.length.isOdd
-            ? sorted[sorted.length ~/ 2]
-            : (sorted[sorted.length ~/ 2 - 1] + sorted[sorted.length ~/ 2]) / 2;
+    final n = _values.length;
+    final steps = <String>[];
+
+    double? arithmetic;
+    double? geometric;
+    double? harmonic;
+
+    if (n > 0) {
+      arithmetic = _values.reduce((a, b) => a + b) / n;
+      steps.addAll([
+        'Arithmetic = [[x₁ + x₂ + ... + xₙ/n]]',
+        '= [[${_values.join(' + ')}/$n]]',
+        '= ${arithmetic.toStringAsFixed(2)}',
+      ]);
+
+      if (_values.every((v) => v > 0)) {
+        final product = _values.reduce((a, b) => a * b);
+        geometric = product == 0 ? 0 : _nthRoot(product, n);
+        steps.addAll([
+          '',
+          'Geometric = ⁿ√(x₁ × x₂ × ... × xₙ)',
+          '= $n√(${_values.join(' × ')})',
+          '= ${geometric.toStringAsFixed(2)}',
+        ]);
+
+        final reciprocalSum = _values.map((v) => 1 / v).reduce((a, b) => a + b);
+        harmonic = n / reciprocalSum;
+        steps.addAll([
+          '',
+          'Harmonic = n / (1/x₁ + 1/x₂ + ... + 1/xₙ)',
+          '= [[$n/${reciprocalSum.toStringAsFixed(4)}]]',
+          '= ${harmonic.toStringAsFixed(2)}',
+        ]);
+      }
+    }
 
     return ToolScaffold(
       title: 'Average',
       children: [
-        TextField(
-          controller: _controller,
-          onChanged: (_) => setState(() {}),
-          maxLines: 3,
-          decoration: InputDecoration(
-            labelText: 'Numbers (comma or space separated)',
-            filled: true,
-            fillColor: AppColors.surface,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-          ),
+        Text('Values', style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 8),
+        ValueListEditor(
+          onChanged: (values) => setState(() => _values = values.whereType<double>().toList()),
         ),
-        const SizedBox(height: 14),
         ResultCard(rows: [
-          ('Count', '${numbers.length}'),
-          ('Sum', numbers.isEmpty ? '--' : numbers.reduce((a, b) => a + b).toStringAsFixed(2)),
-          ('Mean', mean == null ? '--' : mean.toStringAsFixed(2)),
-          ('Median', median == null ? '--' : median.toStringAsFixed(2)),
+          ('Arithmetic', arithmetic == null ? '--' : arithmetic.toStringAsFixed(2)),
+          ('Geometric', geometric == null ? '--' : geometric.toStringAsFixed(2)),
+          ('Harmonic', harmonic == null ? '--' : harmonic.toStringAsFixed(2)),
         ]),
+        SolutionButton(steps: steps.isEmpty ? null : steps, title: 'Average'),
       ],
     );
   }
+
+  double _nthRoot(double value, int n) => math.pow(value, 1 / n).toDouble();
 }

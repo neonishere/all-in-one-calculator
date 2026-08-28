@@ -23,6 +23,14 @@ class _PrimeCheckerScreenState extends State<PrimeCheckerScreen> {
     return true;
   }
 
+  int _nextPrime(int n) {
+    var candidate = n + 1;
+    while (!_isPrime(candidate)) {
+      candidate++;
+    }
+    return candidate;
+  }
+
   List<int> _factors(int n) {
     final result = <int>[];
     var remaining = n;
@@ -40,14 +48,16 @@ class _PrimeCheckerScreenState extends State<PrimeCheckerScreen> {
   Widget build(BuildContext context) {
     final n = int.tryParse(_controller.text);
     final isPrime = n == null ? null : _isPrime(n);
+    final nextPrime = n == null ? null : _nextPrime(n);
     final factors = (n != null && !(isPrime ?? false) && n > 1) ? _factors(n) : null;
 
     return ToolScaffold(
       title: 'Prime checker',
       children: [
-        NumberField(label: 'Number', controller: _controller, onChanged: (_) => setState(() {})),
+        NumberField(label: 'Value', controller: _controller, onChanged: (_) => setState(() {})),
         ResultCard(rows: [
           ('Is prime', isPrime == null ? '--' : (isPrime ? 'Yes' : 'No')),
+          ('Next prime', nextPrime?.toString() ?? '--'),
           if (factors != null && factors.isNotEmpty) ('Prime factors', factors.join(' × ')),
         ]),
       ],
