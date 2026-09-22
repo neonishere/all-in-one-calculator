@@ -1,12 +1,10 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:math_expressions/math_expressions.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/history/history_store.dart';
 import '../../core/theme/app_theme.dart';
+import '../../shared/calc/calc_engine.dart';
 import '../../shared/widgets/calc_key_button.dart';
 import '../../shared/widgets/coming_soon_screen.dart';
 import '../tool_menu/tool_menu_screen.dart';
@@ -28,6 +26,19 @@ class _BasicCalculatorScreenState extends State<BasicCalculatorScreen>
   String _preview = '';
   double _memory = 0;
   int _nthRootN = 2;
+
+  /// True right after `=` is pressed, until the next key that changes the
+  /// expression. A digit then starts a brand-new number instead of
+  /// appending to the old result; an operator continues the chain from it.
+  bool _justEvaluated = false;
+
+  /// The trailing operator/right-hand operand of the last evaluated
+  /// expression (e.g. `×` and `5` for `5×5`), so repeated `=` presses can
+  /// keep re-applying it to the running result.
+  String? _lastOperator;
+  String? _lastOperand;
+
+  static const _digitStartKeys = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '.'};
 
   late final AnimationController _reveal = AnimationController(
     vsync: this,
@@ -144,24 +155,29 @@ class _BasicCalculatorScreenState extends State<BasicCalculatorScreen>
   void _onKey(String key) {
     switch (key) {
       case 'C':
+        _justEvaluated = false;
         _setExpression('');
         return;
       case '⌫':
+        _justEvaluated = false;
         _setExpression(_expression.isEmpty ? '' : _expression.substring(0, _expression.length - 1));
         return;
       case '=':
         _evaluate();
         return;
       case 'nthroot':
-        _applyUnary((v) => v < 0 ? double.nan : math.pow(v, 1 / _nthRootN).toDouble());
+        _consumeJustEvaluated(clear: false);
+        _setExpression(_expression + (_nthRootN == 2 ? '√' : '${CalcEngine.toSuperscript(_nthRootN)}√'));
         return;
       case '+/−':
+        _justEvaluated = false;
         _applyUnary((v) => -v);
         return;
       case 'MC':
         setState(() => _memory = 0);
         return;
       case 'MR':
+        _justEvaluated = false;
         _setExpression(_formatNumber(_memory));
         return;
       case 'M+':
@@ -173,8 +189,18 @@ class _BasicCalculatorScreenState extends State<BasicCalculatorScreen>
         if (v != null) setState(() => _memory -= v);
         return;
       default:
+        _consumeJustEvaluated(clear: _digitStartKeys.contains(key));
         _setExpression(_expression + key);
     }
+  }
+
+  /// Called on any key that appends to the expression. If it follows a
+  /// completed `=`, either starts a fresh number ([clear]) or lets the key
+  /// continue the chain from the existing result.
+  void _consumeJustEvaluated({required bool clear}) {
+    if (!_justEvaluated) return;
+    _justEvaluated = false;
+    if (clear) _expression = '';
   }
 
   void _setExpression(String value) {
@@ -218,7 +244,6 @@ class _BasicCalculatorScreenState extends State<BasicCalculatorScreen>
     );
     if (n == null || n < 2 || n > 20) return;
     setState(() => _nthRootN = n);
-    _applyUnary((v) => v < 0 ? double.nan : math.pow(v, 1 / n).toDouble());
   }
 
   void _openMemorySheet() {
@@ -231,6 +256,7 @@ class _BasicCalculatorScreenState extends State<BasicCalculatorScreen>
         formattedValue: _formatNumber(_memory),
         onRecall: () {
           Navigator.of(sheetContext).pop();
+          _justEvaluated = false;
           _setExpression(_formatNumber(_memory));
         },
         onClear: () {
@@ -242,43 +268,55 @@ class _BasicCalculatorScreenState extends State<BasicCalculatorScreen>
   }
 
   void _evaluate() {
-    final result = _tryEvaluate(_expression);
-    if (result != null && _expression.isNotEmpty && result != _expression) {
-      context.read<HistoryStore>().add(_expression, result);
+    if (_expression.isEmpty) return;
+
+    String exprToEval;
+    if (_justEvaluated && _lastOperator != null && _lastOperand != null) {
+      // Repeated '=': re-apply the same operator/operand to the running result.
+      exprToEval = _expression + _lastOperator! + _lastOperand!;
+    } else {
+      exprToEval = _expression;
+      final op = _extractLastOperation(_expression);
+      _lastOperator = op?.$1;
+      _lastOperand = op?.$2;
+    }
+
+    final result = _tryEvaluate(exprToEval);
+    if (result == null) return;
+    if (result != exprToEval) {
+      context.read<HistoryStore>().add(exprToEval, result);
     }
     setState(() {
-      if (result != null) {
-        _expression = result;
-      }
+      _expression = result;
       _preview = '';
+      _justEvaluated = true;
     });
   }
 
-  String? _tryEvaluate(String input) {
-    if (input.isEmpty) return null;
-    try {
-      final sanitized = input
-          .replaceAll('×', '*')
-          .replaceAll('÷', '/')
-          .replaceAll('−', '-')
-          .replaceAll('%', '/100');
-      final parser = Parser();
-      final exp = parser.parse(sanitized);
-      final value = exp.evaluate(EvaluationType.REAL, ContextModel());
-      if (value.isNaN || value.isInfinite) return null;
-      return _formatNumber(value);
-    } catch (_) {
-      return null;
+  /// Finds the last top-level binary operator in [expr] (ignoring ones
+  /// inside parentheses, and unary +/- signs), returning it with everything
+  /// after it as the operand — used to replay the operation on repeated
+  /// `=` presses.
+  (String, String)? _extractLastOperation(String expr) {
+    var depth = 0;
+    for (var i = expr.length - 1; i > 0; i--) {
+      final ch = expr[i];
+      if (ch == ')') depth++;
+      if (ch == '(') depth--;
+      if (depth == 0 && '+−×÷^'.contains(ch)) {
+        final prev = expr[i - 1];
+        if ('+−×÷^('.contains(prev)) continue;
+        final operand = expr.substring(i + 1);
+        if (operand.isEmpty) return null;
+        return (ch, operand);
+      }
     }
+    return null;
   }
 
-  String _formatNumber(double value) {
-    if (value == value.roundToDouble() && value.abs() < 1e15) return value.toInt().toString();
-    var text = value.toStringAsFixed(8);
-    text = text.replaceFirst(RegExp(r'0+$'), '');
-    text = text.replaceFirst(RegExp(r'\.$'), '');
-    return text;
-  }
+  String? _tryEvaluate(String input) => CalcEngine.tryEvaluate(input);
+
+  String _formatNumber(double value) => CalcEngine.formatNumber(value);
 
   void _openHistory() => _reveal.animateTo(1, curve: Curves.easeOutCubic);
   void _closeHistory() => _reveal.animateTo(0, curve: Curves.easeOutCubic);
@@ -393,13 +431,21 @@ class _BasicCalculatorScreenState extends State<BasicCalculatorScreen>
                                 children: [
                                   if (_preview.isNotEmpty)
                                     Text(
-                                      _preview,
-                                      style: TextStyle(fontSize: 22, color: AppColors.textSecondary),
+                                      CalcEngine.formatDisplay(_preview),
+                                      style: TextStyle(
+                                        fontSize: 22,
+                                        color: AppColors.textSecondary,
+                                        fontFeatures: const [FontFeature.tabularFigures()],
+                                      ),
                                     ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    _expression.isEmpty ? '0' : _expression,
-                                    style: const TextStyle(fontSize: 44, fontWeight: FontWeight.w300),
+                                    _expression.isEmpty ? '0' : CalcEngine.formatDisplay(_expression),
+                                    style: const TextStyle(
+                                      fontSize: 44,
+                                      fontWeight: FontWeight.w300,
+                                      fontFeatures: [FontFeature.tabularFigures()],
+                                    ),
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -425,19 +471,19 @@ class _BasicCalculatorScreenState extends State<BasicCalculatorScreen>
   Widget _buildKeypad() {
     final rows = [for (var i = 0; i < _keys.length; i += 4) _keys.skip(i).take(4).toList()];
     return Padding(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(6),
       child: Column(
         children: [
           for (final row in rows)
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.only(bottom: 5),
                 child: Row(
                   children: [
                     for (final key in row)
                       Expanded(
                         child: Padding(
-                          padding: const EdgeInsets.only(right: 8),
+                          padding: const EdgeInsets.only(right: 5),
                           child: _buildKey(key),
                         ),
                       ),
@@ -452,12 +498,12 @@ class _BasicCalculatorScreenState extends State<BasicCalculatorScreen>
 
   Widget _buildKey(String key) {
     if (key == '=') {
-      return CalcKeyButton(label: '=', filled: true, fontSize: 22, onTap: () => _onKey('='));
+      return CalcKeyButton(label: '=', filled: true, fontSize: 26, onTap: () => _onKey('='));
     }
     final isMemory = _memoryKeys.contains(key);
     if (key == 'nthroot') {
       return CalcKeyButton(
-        label: 'ˣ√',
+        label: _nthRootN == 2 ? '√' : '$_nthRootN√',
         accented: true,
         onTap: () => _onKey('nthroot'),
         onLongPress: _askNthRoot,

@@ -53,9 +53,9 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
       curve: Curves.easeOut,
       child: Material(
         color: background,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(10),
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(10),
           onTap: widget.onTap,
           onLongPress: widget.onLongPress,
           onTapDown: (_) => setState(() => _pressed = true),
@@ -73,7 +73,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
                   Text(
                     widget.label,
                     style: TextStyle(
-                      fontSize: widget.fontSize ?? 18,
+                      fontSize: widget.fontSize ?? 21,
                       fontWeight: FontWeight.w500,
                       color: foreground,
                     ),
@@ -81,7 +81,7 @@ class _CalcKeyButtonState extends State<CalcKeyButton> {
                   if (widget.sublabel != null)
                     Text(
                       widget.sublabel!,
-                      style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                      style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
                     ),
                 ],
               ),

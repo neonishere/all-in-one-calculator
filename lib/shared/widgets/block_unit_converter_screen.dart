@@ -1,24 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/settings/number_format_settings.dart';
 import '../../core/theme/app_theme.dart';
 import '../converters/converter_unit.dart';
+import 'mini_calculator_popup.dart';
 import 'number_format_settings_sheet.dart';
 
 class _Block {
-  _Block(this.unit)
-      : controller = TextEditingController(),
-        focusNode = FocusNode();
+  _Block(this.unit) : controller = TextEditingController();
 
   ConverterUnit unit;
   final TextEditingController controller;
-  final FocusNode focusNode;
 
   void dispose() {
     controller.dispose();
-    focusNode.dispose();
   }
 }
 
@@ -45,11 +42,18 @@ class BlockUnitConverterScreen extends StatefulWidget {
 class _BlockUnitConverterScreenState extends State<BlockUnitConverterScreen> {
   final List<_Block> _blocks = [];
 
+  String get _storageKey => 'block_units_v1_${widget.title.toLowerCase().replaceAll(' ', '_')}';
+
   @override
   void initState() {
     super.initState();
     final defaultIds = widget.defaultUnitIds ?? widget.units.take(3).map((u) => u.id).toList();
-    for (final id in defaultIds) {
+    _buildBlocks(defaultIds);
+    _loadSavedUnits();
+  }
+
+  void _buildBlocks(List<String> ids) {
+    for (final id in ids) {
       ConverterUnit? unit;
       for (final u in widget.units) {
         if (u.id == id) {
@@ -69,10 +73,26 @@ class _BlockUnitConverterScreenState extends State<BlockUnitConverterScreen> {
     }
   }
 
-  _Block _registerBlock(_Block block) {
-    block.focusNode.addListener(() => _onFocusChange(block));
-    return block;
+  Future<void> _loadSavedUnits() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedIds = prefs.getStringList(_storageKey);
+    if (savedIds == null || !mounted) return;
+    final validIds = savedIds.where((id) => widget.units.any((u) => u.id == id)).toList();
+    if (validIds.isEmpty) return;
+    for (final block in _blocks) {
+      block.dispose();
+    }
+    _blocks.clear();
+    _buildBlocks(validIds);
+    setState(() {});
   }
+
+  Future<void> _saveBlocks() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_storageKey, _blocks.map((b) => b.unit.id).toList());
+  }
+
+  _Block _registerBlock(_Block block) => block;
 
   @override
   void dispose() {
@@ -80,22 +100,6 @@ class _BlockUnitConverterScreenState extends State<BlockUnitConverterScreen> {
       block.dispose();
     }
     super.dispose();
-  }
-
-  void _onFocusChange(_Block block) {
-    final settings = context.read<NumberFormatSettings>();
-    if (block.focusNode.hasFocus) {
-      final value = settings.parse(block.controller.text) ?? double.tryParse(block.controller.text);
-      block.controller.text = value == null ? '' : _plain(value);
-    } else {
-      final value = double.tryParse(block.controller.text);
-      if (value != null) block.controller.text = settings.format(value);
-    }
-  }
-
-  String _plain(double value) {
-    if (value == value.roundToDouble() && value.abs() < 1e15) return value.toInt().toString();
-    return value.toString();
   }
 
   void _recalculateFrom(_Block source) {
@@ -109,6 +113,7 @@ class _BlockUnitConverterScreenState extends State<BlockUnitConverterScreen> {
     }
     final settings = context.read<NumberFormatSettings>();
     final baseValue = source.unit.toBase(value);
+    source.controller.text = settings.format(value);
     for (final block in _blocks) {
       if (block == source) continue;
       block.controller.text = settings.format(block.unit.fromBase(baseValue));
@@ -119,12 +124,21 @@ class _BlockUnitConverterScreenState extends State<BlockUnitConverterScreen> {
   double? _currentBaseValue() {
     final settings = context.read<NumberFormatSettings>();
     for (final block in _blocks) {
-      final value = block.focusNode.hasFocus
-          ? double.tryParse(block.controller.text)
-          : (settings.parse(block.controller.text) ?? double.tryParse(block.controller.text));
+      final value = settings.parse(block.controller.text) ?? double.tryParse(block.controller.text);
       if (value != null) return block.unit.toBase(value);
     }
     return null;
+  }
+
+  Future<void> _openBlockPopup(_Block block) async {
+    final result = await showMiniCalculatorPopup(
+      context,
+      title: block.unit.label,
+      initialValue: block.controller.text,
+    );
+    if (result == null) return;
+    block.controller.text = result;
+    _recalculateFrom(block);
   }
 
   Future<void> _addBlock() async {
@@ -138,6 +152,7 @@ class _BlockUnitConverterScreenState extends State<BlockUnitConverterScreen> {
       block.controller.text = settings.format(unit.fromBase(baseValue));
     }
     setState(() => _blocks.add(block));
+    _saveBlocks();
   }
 
   Future<void> _changeUnit(_Block block) async {
@@ -153,11 +168,13 @@ class _BlockUnitConverterScreenState extends State<BlockUnitConverterScreen> {
         block.controller.text = settings.format(newUnit.fromBase(baseValue));
       }
     });
+    _saveBlocks();
   }
 
   void _removeBlock(_Block block) {
     setState(() => _blocks.remove(block));
     block.dispose();
+    _saveBlocks();
   }
 
   Future<ConverterUnit?> _pickUnit({Set<String> excludeIds = const {}}) async {
@@ -253,6 +270,7 @@ class _BlockUnitConverterScreenState extends State<BlockUnitConverterScreen> {
                     final item = _blocks.removeAt(oldIndex);
                     _blocks.insert(newIndex, item);
                   });
+                  _saveBlocks();
                 },
                 children: [for (final block in _blocks) _blockTile(block)],
               ),
@@ -306,16 +324,14 @@ class _BlockUnitConverterScreenState extends State<BlockUnitConverterScreen> {
                 ),
                 TextField(
                   controller: block.controller,
-                  focusNode: block.focusNode,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-]'))],
+                  readOnly: true,
+                  onTap: () => _openBlockPopup(block),
                   style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
                   decoration: const InputDecoration(
                     isDense: true,
                     isCollapsed: true,
                     border: InputBorder.none,
                   ),
-                  onChanged: (_) => _recalculateFrom(block),
                 ),
               ],
             ),
