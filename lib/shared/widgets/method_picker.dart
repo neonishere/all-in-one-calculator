@@ -32,6 +32,7 @@ class MethodPicker<T> extends StatelessWidget {
     required this.onChanged,
     this.helperText,
     this.style = MethodPickerStyle.cycle,
+    this.leadingBuilder,
   });
 
   final String label;
@@ -41,11 +42,15 @@ class MethodPicker<T> extends StatelessWidget {
   final ValueChanged<T> onChanged;
   final MethodPickerStyle style;
 
+  /// Builds a custom leading widget (e.g. a mini shape glyph) for an
+  /// option's value, used in place of [MethodOption.icon] when provided.
+  final Widget Function(T value)? leadingBuilder;
+
   MethodOption<T> get _current => options.firstWhere((o) => o.value == selected);
 
   @override
   Widget build(BuildContext context) {
-    final card = _Card<T>(current: _current);
+    final card = _Card<T>(current: _current, leading: leadingBuilder?.call(selected));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -84,7 +89,9 @@ class MethodPicker<T> extends StatelessWidget {
           children: [
             for (final option in options)
               ListTile(
-                leading: option.icon != null ? Icon(option.icon, color: AppColors.accent) : null,
+                leading: leadingBuilder != null
+                    ? leadingBuilder!(option.value)
+                    : (option.icon != null ? Icon(option.icon, color: AppColors.accent) : null),
                 title: Text(option.title, style: const TextStyle(fontWeight: FontWeight.w600)),
                 subtitle: option.subtitle != null ? Text(option.subtitle!) : null,
                 selected: option.value == selected,
@@ -101,9 +108,10 @@ class MethodPicker<T> extends StatelessWidget {
 }
 
 class _Card<T> extends StatelessWidget {
-  const _Card({required this.current});
+  const _Card({required this.current, this.leading});
 
   final MethodOption<T> current;
+  final Widget? leading;
 
   @override
   Widget build(BuildContext context) {
@@ -112,7 +120,10 @@ class _Card<T> extends StatelessWidget {
       decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12)),
       child: Row(
         children: [
-          if (current.icon != null) ...[
+          if (leading != null) ...[
+            leading!,
+            const SizedBox(width: 12),
+          ] else if (current.icon != null) ...[
             Icon(current.icon, color: AppColors.accent),
             const SizedBox(width: 12),
           ],

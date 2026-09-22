@@ -23,7 +23,15 @@ extension ShapeKindLabel on ShapeKind {
 /// A simple outline drawing of a shape — used both as a small grid icon and
 /// (at a larger size) as the plain diagram atop single-dimension shapes.
 class ShapeIcon extends StatelessWidget {
-  const ShapeIcon({super.key, required this.kind, this.size = 28, this.color, this.showRadius = false, this.filled = false});
+  const ShapeIcon({
+    super.key,
+    required this.kind,
+    this.size = 28,
+    this.color,
+    this.showRadius = false,
+    this.filled = false,
+    this.strokeFactor = 0.045,
+  });
 
   final ShapeKind kind;
   final double size;
@@ -31,31 +39,35 @@ class ShapeIcon extends StatelessWidget {
   final bool showRadius;
   final bool filled;
 
+  /// Stroke width as a fraction of [size]'s shortest side.
+  final double strokeFactor;
+
   @override
   Widget build(BuildContext context) {
     final resolvedColor = color ?? DefaultTextStyle.of(context).style.color ?? Colors.white;
     return SizedBox(
       width: size,
       height: size,
-      child: CustomPaint(painter: _ShapePainter(kind, resolvedColor, showRadius, filled)),
+      child: CustomPaint(painter: _ShapePainter(kind, resolvedColor, showRadius, filled, strokeFactor)),
     );
   }
 }
 
 class _ShapePainter extends CustomPainter {
-  _ShapePainter(this.kind, this.color, this.showRadius, this.filled);
+  _ShapePainter(this.kind, this.color, this.showRadius, this.filled, this.strokeFactor);
 
   final ShapeKind kind;
   final Color color;
   final bool showRadius;
   final bool filled;
+  final double strokeFactor;
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = color
       ..style = filled ? PaintingStyle.fill : PaintingStyle.stroke
-      ..strokeWidth = size.shortestSide * 0.045
+      ..strokeWidth = size.shortestSide * strokeFactor
       ..strokeJoin = StrokeJoin.round
       ..strokeCap = StrokeCap.round;
 
@@ -64,9 +76,32 @@ class _ShapePainter extends CustomPainter {
 
     switch (kind) {
       case ShapeKind.triangle:
-        canvas.drawPath(_polygon([Offset(w / 2, 0), Offset(w, h), Offset(0, h)]), paint);
+        final side = math.min(w, h * 2 / math.sqrt(3)) * 0.88;
+        final triH = side * math.sqrt(3) / 2;
+        final cx = w / 2;
+        final topY = (h - triH) / 2;
+        canvas.drawPath(
+          _polygon([
+            Offset(cx, topY),
+            Offset(cx + side / 2, topY + triH),
+            Offset(cx - side / 2, topY + triH),
+          ]),
+          paint,
+        );
       case ShapeKind.rightTriangle:
-        canvas.drawPath(_polygon([Offset(0, 0), Offset(0, h), Offset(w, h)]), paint);
+        final refSide = math.min(w, h * 2 / math.sqrt(3)) * 0.88;
+        final vertLeg = refSide * math.sqrt(3) / 2;
+        final horizLeg = w * 0.82;
+        final rtLeft = (w - horizLeg) / 2;
+        final rtTop = (h - vertLeg) / 2;
+        canvas.drawPath(
+          _polygon([
+            Offset(rtLeft, rtTop),
+            Offset(rtLeft, rtTop + vertLeg),
+            Offset(rtLeft + horizLeg, rtTop + vertLeg),
+          ]),
+          paint,
+        );
       case ShapeKind.square:
         canvas.drawRect(Rect.fromLTWH(w * 0.08, h * 0.08, w * 0.84, h * 0.84), paint);
       case ShapeKind.rectangle:
@@ -125,5 +160,8 @@ class _ShapePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _ShapePainter oldDelegate) =>
-      oldDelegate.kind != kind || oldDelegate.color != color || oldDelegate.filled != filled;
+      oldDelegate.kind != kind ||
+      oldDelegate.color != color ||
+      oldDelegate.filled != filled ||
+      oldDelegate.strokeFactor != strokeFactor;
 }

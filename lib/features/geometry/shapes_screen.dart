@@ -51,7 +51,7 @@ class ShapesScreen extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        ShapeIcon(kind: kind, size: 48, color: AppColors.accent),
+                        ShapeIcon(kind: kind, size: 48, color: AppColors.accent, strokeFactor: 0.06),
                         const SizedBox(height: 10),
                         Text(kind.label, style: const TextStyle(fontWeight: FontWeight.w600), textAlign: TextAlign.center),
                       ],

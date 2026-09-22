@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_math_fork/flutter_math.dart';
 
 import '../../core/theme/app_theme.dart';
 
@@ -7,9 +8,17 @@ import '../../core/theme/app_theme.dart';
 /// the reference calculator presents solved steps).
 /// Pass null for [steps] (or an empty list) to show it disabled.
 ///
-/// Step strings may embed a fraction as `[[numerator/denominator]]`, which
-/// renders as a stacked fraction with a divider bar instead of a slash —
-/// see [SolutionScreen].
+/// Each step string is real LaTeX, rendered with [flutter_math_fork] —
+/// the KaTeX fonts it ships are metrically the same family as Computer
+/// Modern/Latin Modern, giving the standard textbook math look (proper
+/// minus sign, a radical bar that spans the whole radicand, upright
+/// function names like `\arccos`, italic variables, ...) for free. Wrap a
+/// line in `{{...}}` to render it bold and slightly larger, for a
+/// section's final answer.
+///
+/// Consecutive non-empty lines form one derivation block whose `=` signs
+/// line up in a column (like a LaTeX `align` environment); an empty
+/// string in [steps] starts a new block.
 class SolutionButton extends StatelessWidget {
   const SolutionButton({super.key, required this.steps, this.title = 'Solution'});
 
@@ -48,88 +57,245 @@ class SolutionScreen extends StatelessWidget {
   final String title;
   final List<String> steps;
 
+  List<List<String>> get _blocks {
+    final blocks = <List<String>>[];
+    var current = <String>[];
+    for (final line in steps) {
+      if (line.isEmpty) {
+        if (current.isNotEmpty) blocks.add(current);
+        current = [];
+      } else {
+        current.add(line);
+      }
+    }
+    if (current.isNotEmpty) blocks.add(current);
+    return blocks;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        automaticallyImplyLeading: false,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         title: Text(title),
-        actions: [
-          IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop()),
-        ],
       ),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
-          children: [
-            for (final line in steps)
-              line.isEmpty
-                  ? const SizedBox(height: 20)
-                  : Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      child: _StepLine(text: line),
-                    ),
-          ],
+        // The formulas render at a fixed, "book" size instead of shrinking
+        // or wrapping to fit the screen — pan and pinch-to-zoom to see the
+        // parts that don't fit the viewport, instead of them overflowing
+        // or getting clipped.
+        child: InteractiveViewer(
+          constrained: false,
+          boundaryMargin: const EdgeInsets.all(120),
+          minScale: 0.4,
+          maxScale: 4,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
+            child: _SolutionBody(blocks: _blocks),
+          ),
         ),
       ),
     );
   }
 }
 
-class _StepLine extends StatelessWidget {
-  const _StepLine({required this.text});
+/// Owns the `=`-alignment measurement for the whole page (not per block),
+/// so every derivation block's `=` sign lands on the same shared vertical
+/// line, not just the lines within one block.
+class _SolutionBody extends StatefulWidget {
+  const _SolutionBody({required this.blocks});
 
-  final String text;
+  final List<List<String>> blocks;
 
-  static final _fractionPattern = RegExp(r'\[\[([^\[\]/]+)/([^\[\]/]+)\]\]');
-  static const _textStyle = TextStyle(fontSize: 24, fontWeight: FontWeight.w400);
+  @override
+  State<_SolutionBody> createState() => _SolutionBodyState();
+}
+
+class _SolutionBodyState extends State<_SolutionBody> {
+  final Map<int, double> _leftWidths = {};
+  double? _maxLeftWidth;
+
+  void _onLeftMeasured(int globalIndex, Size size) {
+    if (_leftWidths[globalIndex] == size.width) return;
+    _leftWidths[globalIndex] = size.width;
+    final maxW = _leftWidths.values.fold<double>(0, (m, w) => w > m ? w : m);
+    if (_maxLeftWidth != maxW) {
+      setState(() => _maxLeftWidth = maxW);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final matches = _fractionPattern.allMatches(text).toList();
-    if (matches.isEmpty) {
-      return Text(text, textAlign: TextAlign.center, style: _textStyle);
+    var globalIndex = 0;
+    final children = <Widget>[];
+    for (final block in widget.blocks) {
+      children.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          child: _AlignedBlock(
+            lines: block,
+            leftColumnWidth: _maxLeftWidth,
+            // Each row gets a page-wide-unique index, so every row's
+            // measurement lands in the same shared width map.
+            indexStart: globalIndex,
+            onLeftMeasured: _onLeftMeasured,
+          ),
+        ),
+      );
+      globalIndex += block.length;
     }
-
-    final pieces = <Widget>[];
-    var cursor = 0;
-    for (final match in matches) {
-      if (match.start > cursor) {
-        pieces.add(Text(text.substring(cursor, match.start), style: _textStyle));
-      }
-      pieces.add(_Fraction(numerator: match.group(1)!, denominator: match.group(2)!));
-      cursor = match.end;
-    }
-    if (cursor < text.length) {
-      pieces.add(Text(text.substring(cursor), style: _textStyle));
-    }
-
-    return Wrap(
-      alignment: WrapAlignment.center,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 6,
-      children: pieces,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
     );
   }
 }
 
-class _Fraction extends StatelessWidget {
-  const _Fraction({required this.numerator, required this.denominator});
+class _StepPiece {
+  const _StepPiece({required this.left, required this.right, required this.bold});
 
-  final String numerator;
-  final String denominator;
+  /// LaTeX before the first `=` (e.g. the "Angle BC" label), or empty for
+  /// a continuation line.
+  final String left;
+
+  /// LaTeX from `=` onward, including the `=` itself.
+  final String right;
+
+  final bool bold;
+
+  factory _StepPiece.parse(String raw) {
+    final isFinal = raw.startsWith('{{') && raw.endsWith('}}');
+    final content = isFinal ? raw.substring(2, raw.length - 2) : raw;
+    final eqIndex = content.indexOf('=');
+    if (eqIndex == -1) return _StepPiece(left: '', right: content, bold: isFinal);
+    return _StepPiece(left: content.substring(0, eqIndex).trim(), right: content.substring(eqIndex).trim(), bold: isFinal);
+  }
+}
+
+/// Renders one derivation block. [leftColumnWidth] is shared across every
+/// block on the page (owned by [_SolutionBodyState]) so every block's `=`
+/// lands on the same vertical line, not just the lines within this one.
+///
+/// The page is unconstrained (see [InteractiveViewer] above), so there's
+/// no screen width to derive a column guess from — and a fixed guess
+/// can't work anyway, since a too-narrow one would overflow. Instead each
+/// "before =" piece reports its real laid-out width once rendered
+/// (bypassing Flutter's intrinsic-dimensions protocol, which [Math]
+/// widgets don't support) via [onLeftMeasured], keyed by [indexStart] + a
+/// row offset so it lands in the page-wide width map.
+class _AlignedBlock extends StatelessWidget {
+  const _AlignedBlock({
+    required this.lines,
+    required this.leftColumnWidth,
+    required this.indexStart,
+    required this.onLeftMeasured,
+  });
+
+  final List<String> lines;
+  final double? leftColumnWidth;
+  final int indexStart;
+  final void Function(int index, Size size) onLeftMeasured;
+
+  static const _baseFontSize = 23.0;
+  static const _boldFontSize = 27.0;
 
   @override
   Widget build(BuildContext context) {
-    return IntrinsicWidth(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(numerator.trim(), textAlign: TextAlign.center, style: const TextStyle(fontSize: 19)),
-          Container(margin: const EdgeInsets.symmetric(vertical: 3), height: 1.5, color: AppColors.textPrimary),
-          Text(denominator.trim(), textAlign: TextAlign.center, style: const TextStyle(fontSize: 19)),
-        ],
+    final pieces = lines.map(_StepPiece.parse).toList();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < pieces.length; i++)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: leftColumnWidth,
+                  child: pieces[i].left.isEmpty
+                      ? null
+                      : Align(
+                          alignment: Alignment.centerRight,
+                          child: _MeasureSize(
+                            onChange: (size) => onLeftMeasured(indexStart + i, size),
+                            child: _MathPiece(
+                              tex: pieces[i].left,
+                              bold: pieces[i].bold,
+                              fontSize: pieces[i].bold ? _boldFontSize : _baseFontSize,
+                            ),
+                          ),
+                        ),
+                ),
+                const SizedBox(width: 10),
+                _MathPiece(
+                  tex: pieces[i].right,
+                  bold: pieces[i].bold,
+                  fontSize: pieces[i].bold ? _boldFontSize : _baseFontSize,
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+typedef _OnSizeChange = void Function(Size size);
+
+/// Reports [child]'s real laid-out size after each frame, without using
+/// the intrinsic-dimensions protocol (which [Math] widgets don't support).
+class _MeasureSize extends StatefulWidget {
+  const _MeasureSize({required this.onChange, required this.child});
+
+  final _OnSizeChange onChange;
+  final Widget child;
+
+  @override
+  State<_MeasureSize> createState() => _MeasureSizeState();
+}
+
+class _MeasureSizeState extends State<_MeasureSize> {
+  Size? _lastSize;
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _report());
+    return widget.child;
+  }
+
+  void _report() {
+    if (!mounted) return;
+    final size = (context.findRenderObject() as RenderBox?)?.size;
+    if (size != null && size != _lastSize) {
+      _lastSize = size;
+      widget.onChange(size);
+    }
+  }
+}
+
+class _MathPiece extends StatelessWidget {
+  const _MathPiece({required this.tex, required this.bold, required this.fontSize});
+
+  final String tex;
+  final bool bold;
+  final double fontSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Math.tex(
+      bold ? '\\mathbf{$tex}' : tex,
+      mathStyle: MathStyle.display,
+      textStyle: TextStyle(fontSize: fontSize, color: AppColors.textPrimary),
+      onErrorFallback: (_) => Text(
+        tex,
+        style: TextStyle(fontSize: fontSize, color: AppColors.textPrimary),
       ),
     );
   }
